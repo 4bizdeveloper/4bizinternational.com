@@ -173,16 +173,26 @@ export default function Contact() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error(`Server status: ${response.status}`);
+      let result: any = {};
+      try {
+        result = await response.json();
+      } catch (_) {}
 
-      const result = await response.json();
+      const isSuccessful = response.ok && (
+        result.status === 'success' || 
+        result.status === 'partial_success' || 
+        result.success === true
+      );
 
-      if (result.status === 'success') {
+      if (isSuccessful) {
         setStatus('success');
         if (formRef.current) formRef.current.reset();
         setPhone('');
 
-        // Safe background fetch wrapper handling CORS & network drops
+        if (result.status === 'partial_success' && result.error) {
+          setErrorMsg(result.error);
+        }
+
         const safeFetch = async (url: string, options: RequestInit) => {
           try {
             await fetch(url, options);
@@ -191,7 +201,6 @@ export default function Contact() {
           }
         };
 
-        // Fire secondary endpoints without throwing unhandled exceptions
         safeFetch("https://fourbiz-lead-crm-backend-python.onrender.com/api/leads", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -217,13 +226,15 @@ export default function Contact() {
 
         setTimeout(() => {
           setStatus('idle');
-        }, 3000);
+          setErrorMsg('');
+        }, 5000);
       } else {
-        throw new Error(result.message || 'Interrupted');
+        const detailedError = result?.error || result?.message || result?.details || `Server response status: ${response.status} (${response.statusText || 'Failed'})`;
+        throw new Error(detailedError);
       }
     } catch (err: any) {
       setStatus('error');
-      setErrorMsg(err.message || 'Failed to submit the entry.');
+      setErrorMsg(err.message || 'Unable to establish connection or transmit email payload.');
     }
   };
 
@@ -239,7 +250,7 @@ export default function Contact() {
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[90vh] items-stretch relative w-full">
         
-        {/* LEFT COMPONENT: CONTACT TRANSMISSION FORM */}
+        {/* LEFT COMPONENT: CONTACT FORM */}
         <div className="lg:col-span-6 xl:col-span-7 bg-[#fcfdfd] py-16 px-6 sm:px-12 lg:px-16 xl:px-20 flex flex-col justify-center transition-colors duration-300 w-full">
           <div className="w-full max-w-xl mx-auto space-y-8">
             <header className="text-left">
@@ -334,13 +345,13 @@ export default function Contact() {
                   </div>
                 </div>
 
-                {/* Optional Message Field */}
+                {/* Message Field */}
                 <div className="flex flex-col w-full">
                   <label htmlFor="form-message" className="sr-only">Your Message</label>
                   <textarea id="form-message" name="message" placeholder="Your Message (optional)" className="screenshot-input h-28 resize-none" />
                 </div>
 
-                {/* Form Action Controls */}
+                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={status === 'sending'}
@@ -363,27 +374,34 @@ export default function Contact() {
                       initial={{ opacity: 0, y: 5 }} 
                       animate={{ opacity: 1, y: 0 }} 
                       exit={{ opacity: 0 }}
-                      className={`p-4 border rounded-xl flex items-center gap-3 text-xs font-semibold will-change-transform ${
+                      className={`p-4 border rounded-xl flex flex-col gap-1 text-xs font-semibold will-change-transform ${
                         status === 'success' 
                           ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' 
                           : 'bg-rose-500/10 border-rose-500/20 text-rose-600'
                       }`}
                     >
-                      {status === 'success' ? (
-                        <RiCheckboxCircleLine className="text-lg shrink-0 text-emerald-600" />
-                      ) : (
-                        <RiErrorWarningLine className="text-lg shrink-0 text-rose-600" />
+                      <div className="flex items-center gap-2">
+                        {status === 'success' ? (
+                          <RiCheckboxCircleLine className="text-lg shrink-0 text-emerald-600" />
+                        ) : (
+                          <RiErrorWarningLine className="text-lg shrink-0 text-rose-600" />
+                        )}
+                        <span className="font-bold">
+                          {status === 'success' ? 'Thank you! Your lead has been logged into CRM successfully.' : `SMTP / API Error: ${errorMsg}`}
+                        </span>
+                      </div>
+                      {errorMsg && status === 'success' && (
+                        <p className="text-[11px] opacity-80 pl-6">
+                          Note: {errorMsg}
+                        </p>
                       )}
-                      <span>
-                        {status === 'success' ? 'Thank you! Your inquiry has been transmitted successfully.' : `Error: ${errorMsg}`}
-                      </span>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </form>
             </motion.div>
 
-            {/* Social Anchor Indicators */}
+            {/* Social Icons Row */}
             <div className="pt-5 flex items-center gap-3 border-t border-neutral-200 mt-2">
               {socialIcons.map((icon, idx) => (
                 <a
